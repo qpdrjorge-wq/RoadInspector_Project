@@ -1,0 +1,7 @@
+streamlit
+ultralytics
+opencv-python
+pandas
+folium
+streamlit-folium
+requests
