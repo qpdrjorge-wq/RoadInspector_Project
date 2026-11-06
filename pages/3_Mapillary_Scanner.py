@@ -41,7 +41,6 @@ def geocode_location(query):
 
 @st.cache_data(ttl=600)
 def verify_road_click(lat, lon):
-    # Check OpenStreetMap vector geometry within 22m for drivable roads only
     overpass_query = f"""
     [out:json][timeout:4];
     way(around:22,{lat},{lon})["highway"]["highway"!~"footway|steps|pedestrian|path|cycleway|corridor"];
@@ -64,7 +63,6 @@ def verify_road_click(lat, lon):
     except Exception:
         pass
 
-    # Fallback reverse check if Overpass public endpoint is busy
     try:
         rev = requests.get(
             "https://nominatim.openstreetmap.org/reverse",
@@ -91,12 +89,9 @@ def _parse_capture_dt(raw_ts):
 
 @st.cache_data(ttl=300)
 def fetch_latest_road_sequence(token, lat, lon):
-    # SAFE ZONE: Reduced from 0.005 (~500m) to 0.002 (~220m).
-    # Large enough to jump to a good street, small enough to not crash Mapillary.
     offset = 0.002
     bbox = f"{lon - offset},{lat - offset},{lon + offset},{lat + offset}"
 
-    # SAFE LIMIT: Capped at 200 frames to prevent Mapillary Server Error 500
     url = (
         f"https://graph.mapillary.com/images?access_token={token}"
         f"&fields=id,geometry,thumb_1024_url,sequence,captured_at&bbox={bbox}&limit=200"
@@ -110,20 +105,16 @@ def fetch_latest_road_sequence(token, lat, lon):
     if not raw_data:
         return {"frames": [], "newest_dt": None}
 
-    # Group the raw area data into continuous driving sequences
     sequences = {}
     for item in raw_data:
         seq_id = item.get("sequence") or "default"
         sequences.setdefault(seq_id, []).append(item)
 
-    # SMART FILTER: Ignore tiny snippets, prefer sequences with dense data
     rich_sequences = {k: v for k, v in sequences.items() if len(v) >= 10}
     pool = rich_sequences if rich_sequences else sequences
 
-    # THE MAGIC: Automatically latch onto the sequence with the MOST frames
     best_seq_frames = max(pool.values(), key=lambda imgs: len(imgs))
 
-    # Sort the winning sequence chronologically so the audit plays smoothly forward
     best_seq_frames.sort(key=lambda x: x.get("captured_at", 0))
     newest_ts = max(i.get("captured_at", 0) for i in best_seq_frames)
 
@@ -133,7 +124,6 @@ def fetch_latest_road_sequence(token, lat, lon):
     }
 
 
-# Session state setup for Search + Map Click sync
 if "map_center" not in st.session_state:
     st.session_state.map_center = [14.6600, 121.0730]
 if "target_coords" not in st.session_state:
@@ -141,7 +131,6 @@ if "target_coords" not in st.session_state:
 if "last_click_key" not in st.session_state:
     st.session_state.last_click_key = None
 
-# 1. Location Search Bar
 search_col1, search_col2 = st.columns([4, 1])
 with search_col1:
     search_query = st.text_input(
@@ -162,7 +151,6 @@ if search_clicked and search_query.strip():
     else:
         st.warning("Location not found. Try adding 'Quezon City' or 'Metro Manila'.")
 
-# 2. Interactive Folium Map
 m = folium.Map(location=st.session_state.map_center, zoom_start=16)
 if st.session_state.target_coords:
     folium.Marker(
@@ -183,7 +171,6 @@ if map_data and map_data.get("last_clicked"):
         st.session_state.map_center = [c_lat, c_lon]
         st.rerun()
 
-# 3. Road Validation, Data Freshness Check & Sequence Simulation
 if st.session_state.target_coords:
     t_lat, t_lon = st.session_state.target_coords
     on_road, road_name = verify_road_click(t_lat, t_lon)
@@ -204,7 +191,6 @@ if st.session_state.target_coords:
         else:
             frames = seq_meta["frames"]
 
-            # Instantly approve the sequence without showing archival dates
             st.success(f"Mapillary Sequence Stream Locked: {len(frames)} continuous frames ready for analysis.")
 
             if st.button("Run Live Sequence Audit", type="primary"):
@@ -213,7 +199,7 @@ if st.session_state.target_coords:
                 progress = st.progress(0.0)
 
                 hazards_found = 0
-                logged_points = []  # (hazard_name, lat, lon) for 15m deduplication
+                logged_points = []
 
                 for idx, item in enumerate(frames):
                     img_url = item.get("thumb_1024_url")
@@ -231,13 +217,11 @@ if st.session_state.target_coords:
 
                     for det in detections:
                         h_name = det["name"]
-                        # Skip if same hazard class was already logged within 15 meters
                         is_dup = any(
                             prev_name == h_name and haversine_meters(lat, lon, p_lat, p_lon) < 15.0
                             for prev_name, p_lat, p_lon in logged_points
                         )
                         if not is_dup:
-                            # Save visual evidence
                             os.makedirs("evidence", exist_ok=True)
                             img_path = f"evidence/mapillary_{uuid.uuid4().hex[:6]}.jpg"
                             cv2.imwrite(img_path, annotated_bgr)

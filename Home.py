@@ -11,18 +11,15 @@ from PIL import Image
 from utils.nav import render_top_nav
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(ROOT, "inspections.db")   # Home.py lives next to inspections.db
-HERO_DIR = os.path.join(ROOT, "assets", "hero")   # drop your hero images here
-HOLD = 6.0   # seconds each image stays on screen
-FADE = 1.5   # seconds for the crossfade between images
+DB_PATH = os.path.join(ROOT, "inspections.db")
+HERO_DIR = os.path.join(ROOT, "assets", "hero")
+HOLD = 6.0
+FADE = 1.5
 
 st.set_page_config(page_title="RoadInspector | Home", page_icon="🛣️",
                    layout="wide", initial_sidebar_state="collapsed")
 
 
-# --- HERO IMAGES ------------------------------------------------------------
-# Finds files named bg1, bg2, bg3, ... (jpg / jpeg / jfif / png / webp) anywhere in
-# the project folder, so it does not matter which sub-folder they were saved in.
 IMG_EXT = (".jpg", ".jpeg", ".jfif", ".png", ".webp")
 SKIP_DIRS = {".venv", "venv", "__pycache__", "node_modules", "evidence", ".git", ".idea", ".streamlit"}
 
@@ -36,8 +33,8 @@ def _hero_files():
             if m and name.lower().endswith(IMG_EXT):
                 found.setdefault(int(m.group(1)), os.path.join(folder, name))
     if found:
-        return [found[k] for k in sorted(found)]   # bg1, bg2, bg3, bg4 ...
-    if os.path.isdir(HERO_DIR):                    # fallback: any image in assets/hero
+        return [found[k] for k in sorted(found)]
+    if os.path.isdir(HERO_DIR):
         return sorted(os.path.join(HERO_DIR, f) for f in os.listdir(HERO_DIR) if f.lower().endswith(IMG_EXT))
     return []
 
@@ -61,7 +58,6 @@ def load_hero_images(signature):
 files = _hero_files()
 imgs, failed = load_hero_images(tuple((f, os.path.getmtime(f)) for f in files))
 
-# Crossfade keyframes depend on how many images there are
 n = max(len(imgs), 1)
 total = n * HOLD
 k_in, k_hold, k_out = FADE / total * 100, HOLD / total * 100, (HOLD + FADE) / total * 100
@@ -80,15 +76,11 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# --- STYLES -----------------------------------------------------------------
-# Visual language: Philippine road markings (asphalt grey, yellow center line).
-# Only the hero and nav pills are fixed-dark; the rest follows the Streamlit theme.
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap');
 .block-container { position: relative; padding: 4rem 2rem 3rem !important; max-width: 1280px; }
 
-/* hero */
 .ri-hero {
   position: relative; overflow: hidden; border-radius: 14px;
   min-height: 78vh; background: #1B1E23; font-family: 'Barlow', 'Segoe UI', sans-serif;
@@ -113,7 +105,6 @@ st.markdown("""
   .ri-slide:first-child { opacity: 1; }
 }
 
-/* content sections */
 .ri-h { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 700;
   font-size: 2rem; line-height: 1.1; margin: 36px 0 12px; }
 .ri-body { font-family: 'Barlow', 'Segoe UI', sans-serif; font-size: 1.05rem; line-height: 1.6; max-width: 68ch; }
@@ -147,11 +138,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- TOP-RIGHT NAV (shared with every page) ---
 render_top_nav(overlay=True)
 
 
-# --- HERO -------------------------------------------------------------------
 slides = "".join(f'<div class="ri-slide ri-s{i}"></div>' for i in range(len(imgs)))
 st.markdown(f"""
 <div class="ri-hero">
@@ -187,7 +176,7 @@ if len(imgs) < 4:
 if failed:
     st.caption("Could not read these images: " + ", ".join(failed))
 
-# --- LIVE NUMBERS -----------------------------------------------------------
+
 @st.cache_data(ttl=30)
 def load_stats():
     """Counts from the local SQLite DB. Returns zeros if the DB is empty or missing."""
@@ -211,7 +200,7 @@ m2.metric("Critical hazards", f"{critical:,}")
 m3.metric("Mapped to a location", f"{mapped:,}")
 m4.metric("Hazard types found", f"{types}")
 
-# --- ABOUT ------------------------------------------------------------------
+
 st.markdown('<div class="ri-h">About the system</div>', unsafe_allow_html=True)
 about, legend = st.columns([3, 2], gap="large")
 with about:
@@ -232,7 +221,7 @@ with legend:
 </div>
 """, unsafe_allow_html=True)
 
-# --- CAPABILITIES -----------------------------------------------------------
+
 st.markdown('<div class="ri-h">What it can do</div>', unsafe_allow_html=True)
 c1, c2, c3 = st.columns(3, gap="large")
 caps = [
@@ -244,7 +233,7 @@ for col, title, text in caps:
     with col:
         st.markdown(f'<div class="ri-cap"><h4>{title}</h4><p>{text}</p></div>', unsafe_allow_html=True)
 
-# --- HOW IT WORKS -----------------------------------------------------------
+
 st.markdown('<div class="ri-h">How an audit runs</div>', unsafe_allow_html=True)
 s1, s2, s3, s4 = st.columns(4, gap="large")
 steps = [
@@ -258,7 +247,7 @@ for col, num, title, text in steps:
         st.markdown(f'<div class="ri-step"><div class="ri-num">{num}</div><h4>{title}</h4><p>{text}</p></div>',
                     unsafe_allow_html=True)
 
-# --- FOOTER -----------------------------------------------------------------
+
 st.markdown("""
 <div class="ri-foot">RoadInspector: Detections are decision support and should be verified by an engineer before work orders are issued.</div>
 """, unsafe_allow_html=True)

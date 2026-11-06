@@ -11,7 +11,6 @@ DAMAGE_MODEL_PATH = os.path.join(BASE_DIR, "RDD.pt")
 
 LOCAL_FALLBACK_TOKEN = ""
 
-# Readable LGU labels, severities, and BGR box colors
 CLASS_MAP = {
     "D00": ("Longitudinal Crack", "MEDIUM", (0, 165, 255)),
     "D10": ("Transverse Crack", "MEDIUM", (0, 165, 255)),
@@ -54,37 +53,28 @@ def _compute_iou(box_a, box_b):
     return inter / float(area_a + area_b - inter + 1e-6)
 
 
-# BUMPED CONFIDENCE: Increased to 0.50 to automatically filter out shadows and weak guesses
 def analyze_road_frame(frame, conf=0.50):
     img_h, img_w = frame.shape[:2]
 
-    # 1. TRAPEZOIDAL PERSPECTIVE MASK
-    # Maps perfectly to a driving lane (narrow at horizon, wide at the hood)
-    # 1. TRAPEZOIDAL PERSPECTIVE MASK (ULTRA-WIDE)
-    # Spans edge-to-edge at the bottom to catch shoulder hazards and construction sites
     mask = np.zeros((img_h, img_w), dtype=np.uint8)
     pts = np.array([[
-        [int(img_w * 0.05), int(img_h * 0.45)],  # Top-left (horizon widened and moved up slightly)
-        [int(img_w * 0.95), int(img_h * 0.45)],  # Top-right (horizon widened and moved up slightly)
-        [img_w, img_h],  # Bottom-right (full edge-to-edge width)
-        [0, img_h]  # Bottom-left (full edge-to-edge width)
+        [int(img_w * 0.05), int(img_h * 0.45)],
+        [int(img_w * 0.95), int(img_h * 0.45)],
+        [img_w, img_h],
+        [0, img_h]
     ]], dtype=np.int32)
     cv2.fillPoly(mask, pts, 255)
 
-    # Apply the mask: Everything outside the road lane becomes pitch black to the AI
     road_frame = cv2.bitwise_and(frame, frame, mask=mask)
 
-    # We draw the boxes on the original frame so the UI looks natural to the user
     annotated = frame.copy()
 
-    # VISUAL PROOF FOR THE PANEL: Draw the yellow trapezoid on screen
     cv2.polylines(annotated, pts, isClosed=True, color=(0, 255, 255), thickness=2)
     cv2.putText(annotated, "AI Analysis Zone", (int(img_w * 0.36), int(img_h * 0.53)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
     obs_model, dmg_model = load_models()
 
-    # AI only looks at the masked road_frame
     obs_res = obs_model.predict(road_frame, conf=conf, classes=[2, 6], verbose=False)[0]
     dmg_res = dmg_model.predict(road_frame, conf=conf, verbose=False)[0]
 
@@ -100,13 +90,9 @@ def analyze_road_frame(frame, conf=0.50):
             box_w = x2 - x1
             box_h = y2 - y1
 
-            # 2. GEOMETRIC ASPECT RATIO FILTER
-            # If an object is significantly taller than it is wide (like a pole or person), reject it.
-            # Potholes and road obstacles are wide or square.
             if box_h > (box_w * 1.5):
                 continue
 
-            # Reject massive false positives (e.g., if a shadow covers half the screen)
             if box_w > (img_w * 0.60):
                 continue
 

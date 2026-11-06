@@ -42,12 +42,10 @@ def process_uploaded_video(input_path, frame_placeholder, progress_bar, lat=None
         for det in detections:
             h_name = det["name"]
             if current_sec - last_logged_sec.get(h_name, -999.0) >= 2.0:
-                # Save visual evidence
                 os.makedirs("evidence", exist_ok=True)
                 img_path = f"evidence/dashcam_{uuid.uuid4().hex[:6]}.jpg"
                 cv2.imwrite(img_path, annotated_bgr)
 
-                # INSERT COORDINATES & IMAGE PATH HERE
                 insert_report(h_name, det["severity"], lat=lat, lon=lon, image_path=img_path)
                 last_logged_sec[h_name] = current_sec
                 hazards_logged += 1

@@ -10,9 +10,8 @@ st.set_page_config(page_title="Reports & Logs", layout="wide")
 from utils.nav import render_top_nav
 render_top_nav()
 
-DB_FILE = "inspections.db"  # same relative path the rest of the app uses
+DB_FILE = "inspections.db"
 
-# --- CUSTOM CSS ---
 st.markdown("""
     <style>
     .pill { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid; }
@@ -54,11 +53,8 @@ def reverse_geocode(lat, lon):
     return f"{lat:.4f}, {lon:.4f}"
 
 
-# --- LOCATION LOOKUP FOR THE CSV EXPORT ---------------------------------------
-# Results are saved in a Geo_Cache table inside inspections.db, so each spot is
-# looked up from OpenStreetMap only once, even across app restarts.
 def _geo_key(lat, lon):
-    return f"{float(lat):.4f},{float(lon):.4f}"  # 4 decimals is roughly 11 m
+    return f"{float(lat):.4f},{float(lon):.4f}"
 
 
 def _geo_load():
@@ -76,7 +72,6 @@ def _geo_save(key, addr):
 
 
 def _fetch_address(lat, lon):
-    """Returns (street, barangay, city, province) or None if the lookup failed."""
     try:
         resp = requests.get(
             "https://nominatim.openstreetmap.org/reverse",
@@ -99,7 +94,6 @@ def _fetch_address(lat, lon):
 
 
 def build_export(frame):
-    """Adds Location, Street, Barangay, City_Municipality, Province_Region after Longitude."""
     out = frame.copy()
     keys = [
         _geo_key(la, lo) if pd.notnull(la) and pd.notnull(lo) else None
@@ -113,11 +107,11 @@ def build_export(frame):
         for i, k in enumerate(todo, start=1):
             lat, lon = k.split(",")
             addr = _fetch_address(lat, lon)
-            if addr:  # failed lookups are not saved, so they are retried next time
+            if addr:
                 cache[k] = addr
                 _geo_save(k, addr)
             bar.progress(i / len(todo), text=f"Looking up locations ({i}/{len(todo)})")
-            time.sleep(1.1)  # OpenStreetMap's public server allows about 1 request per second
+            time.sleep(1.1)
         bar.empty()
 
     def part(k, i):
@@ -127,7 +121,7 @@ def build_export(frame):
         if not k:
             return "Batch Video Upload (no GPS)"
         text = ", ".join(p for p in (part(k, 0), part(k, 1), part(k, 2)) if p)
-        return text or k  # fall back to raw coordinates if the lookup failed
+        return text or k
 
     out["Location"] = [label(k) for k in keys]
     out["Street"] = [part(k, 0) for k in keys]
@@ -141,7 +135,6 @@ def build_export(frame):
     return out[base[:pos] + new + base[pos:]]
 
 
-# --- FETCH DATA ---
 try:
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql_query("SELECT * FROM Reports ORDER BY Date_Captured DESC", conn)
@@ -158,7 +151,6 @@ if not df.empty:
         st.subheader("Official Database Export")
         st.caption("The CSV includes the street, barangay, and city of every geotagged report.")
 
-    # Throw away a stale export whenever reports are added
     sig = (len(df), int(df["Report_ID"].max()))
     if st.session_state.get("export_sig") != sig:
         st.session_state.pop("export_csv", None)
@@ -172,17 +164,14 @@ if not df.empty:
 
     if prepare:
         export_df = build_export(df)
-        # utf-8-sig keeps names like Parañaque and Las Piñas intact when opened in Excel
         st.session_state["export_csv"] = export_df.to_csv(index=False).encode("utf-8-sig")
         st.session_state["export_sig"] = sig
         st.rerun()
 
     st.divider()
 
-    # VISUAL EVIDENCE LOGS
     st.subheader("Visual Evidence Gallery")
 
-    # Filter functionality
     filter_val = st.selectbox("Filter by Severity:", ["All", "CRITICAL", "MEDIUM", "LOW"])
     if filter_val != "All":
         display_df = df[df['Severity'] == filter_val]

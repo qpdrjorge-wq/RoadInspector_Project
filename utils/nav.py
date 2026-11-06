@@ -1,15 +1,5 @@
-"""Shared top-right navigation for RoadInspector.
-
-Call render_top_nav() right after st.set_page_config() on every page.
-    Home.py  -> render_top_nav(overlay=True)    (floats over the hero image)
-    pages/*  -> render_top_nav()                (sits at the top-right of the page)
-
-If a page puts its own controls in st.sidebar, use render_top_nav(hide_sidebar=False)
-so only the default page list is hidden and your controls stay visible.
-"""
 import streamlit as st
 
-# (label, path relative to Home.py). Edit here if you rename or add pages.
 PAGES = [
     ("Home", "Home.py"),
     ("Dashboard", "pages/1_Dashboard.py"),
@@ -62,7 +52,7 @@ def render_top_nav(overlay=False, hide_sidebar=True):
 
     key = "topnav" if overlay else "topnav_bar"
     try:
-        box = st.container(key=key)   # container keys need Streamlit 1.39+
+        box = st.container(key=key)
     except TypeError:
         box = st.container()
     with box:

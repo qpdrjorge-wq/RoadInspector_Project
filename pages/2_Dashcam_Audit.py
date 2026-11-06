@@ -27,19 +27,16 @@ def geocode_location(query):
         return float(hit["lat"]), float(hit["lon"]), hit.get("display_name", query)
     return None
 
-# Session State for Video Location
 if "vid_lat" not in st.session_state:
     st.session_state.vid_lat = None
 if "vid_lon" not in st.session_state:
     st.session_state.vid_lon = None
 if "vid_map_center" not in st.session_state:
-    st.session_state.vid_map_center = [14.6600, 121.0730] # Quezon City default
+    st.session_state.vid_map_center = [14.6600, 121.0730]
 
-# STEP 1: Select Location
 st.subheader("1. Set Documentation Location")
 st.markdown("Search for the footage location, or click directly on the map to set the exact coordinates.")
 
-# Location Search Bar
 search_col1, search_col2 = st.columns([4, 1])
 with search_col1:
     search_query = st.text_input(
@@ -61,7 +58,6 @@ if search_clicked and search_query.strip():
     else:
         st.warning("Location not found. Try adding the city name (e.g., 'Quezon City').")
 
-# Interactive Folium Map
 m = folium.Map(location=st.session_state.vid_map_center, zoom_start=16)
 if st.session_state.vid_lat and st.session_state.vid_lon:
     folium.Marker(
@@ -82,7 +78,6 @@ if st.session_state.vid_lat and not search_clicked:
 elif not st.session_state.vid_lat:
     st.info("Please search or click the map above to set a location before uploading footage.")
 
-# STEP 2: Upload and Scan
 st.subheader("2. Upload and Analyze")
 uploaded_file = st.file_uploader(
     "Upload Dashcam Footage",
@@ -108,7 +103,6 @@ if uploaded_file is not None and st.session_state.vid_lat is not None:
             temp_in.close()
 
             try:
-                # Pass the coordinates into the processor
                 hazards_count, snapshots = process_uploaded_video(
                     input_path, live_feed, progress_bar,
                     lat=st.session_state.vid_lat, lon=st.session_state.vid_lon

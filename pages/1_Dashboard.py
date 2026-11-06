@@ -8,7 +8,6 @@ st.set_page_config(page_title="Executive Dashboard", layout="wide", initial_side
 from utils.nav import render_top_nav
 render_top_nav()
 
-# --- CUSTOM CSS FOR STYLING ---
 st.markdown("""
     <style>
     .pill { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid; }
@@ -24,7 +23,6 @@ def render_pill(severity):
     elif sev == "MEDIUM": return '<span class="pill pill-medium">● MEDIUM</span>'
     else: return '<span class="pill pill-low">● LOW</span>'
 
-# --- FETCH REAL DATA ---
 try:
     conn = sqlite3.connect("../inspections.db")
     df = pd.read_sql_query("SELECT * FROM Reports ORDER BY Date_Captured DESC", conn)
@@ -44,7 +42,6 @@ if not df.empty:
     med_count = len(df[df['Severity'] == 'MEDIUM'])
     low_count = len(df[df['Severity'] == 'LOW'])
 
-    # --- KPI BAR ---
     st.markdown("#### Overall Infrastructure Health")
     st.markdown(f"""
         <div style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 24px; background-color: #eee;">
@@ -67,7 +64,6 @@ if not df.empty:
 
     st.divider()
 
-    # --- MASTER HEATMAP ---
     st.subheader("Master Geospatial Hazard Map")
     if not map_df.empty:
         center_lat = map_df['Latitude'].mean()
