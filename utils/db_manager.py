@@ -1,7 +1,12 @@
 import sqlite3
+import os
+
+# This forces the path to always be in the main project root, no matter which file calls it
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "inspections.db")
 
 def init_db():
-    conn = sqlite3.connect("inspections.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS Reports (
@@ -19,7 +24,7 @@ def init_db():
     conn.close()
 
 def insert_report(hazard_class, severity, lat=None, lon=None, image_path=None):
-    conn = sqlite3.connect("inspections.db")
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
         INSERT INTO Reports (Latitude, Longitude, Hazard_Class, Severity, Image_Path)

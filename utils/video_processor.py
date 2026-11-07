@@ -19,6 +19,9 @@ def process_uploaded_video(input_path, frame_placeholder, progress_bar, lat=None
     frame_idx = 0
     hazards_logged = 0
     last_logged_sec = {}
+
+    # NEW: Keep track of the highest confidence score we've seen recently
+    last_logged_conf = {}
     evidence_snapshots = []
 
     while cap.isOpened():
@@ -41,17 +44,30 @@ def process_uploaded_video(input_path, frame_placeholder, progress_bar, lat=None
         logged_this_frame = False
         for det in detections:
             h_name = det["name"]
-            if current_sec - last_logged_sec.get(h_name, -999.0) >= 2.0:
+            conf = det["conf"]
+
+            # 1. Has a full second passed since we saw this type of hazard?
+            time_passed = (current_sec - last_logged_sec.get(h_name, -999.0)) >= 1.0
+
+            # 2. Or, are we getting a HIGHER confidence view of a hazard we just saw?
+            better_view = conf > last_logged_conf.get(h_name, 0.0)
+
+            # If either is true, snap the photo and log it to the database
+            if time_passed or better_view:
                 os.makedirs("evidence", exist_ok=True)
                 img_path = f"evidence/dashcam_{uuid.uuid4().hex[:6]}.jpg"
-                cv2.imwrite(img_path, annotated_bgr)
 
+                cv2.imwrite(img_path, annotated_bgr)
                 insert_report(h_name, det["severity"], lat=lat, lon=lon, image_path=img_path)
+
+                # Reset the timers and update the highest confidence score
                 last_logged_sec[h_name] = current_sec
+                last_logged_conf[h_name] = conf
+
                 hazards_logged += 1
                 logged_this_frame = True
 
-        if logged_this_frame and len(evidence_snapshots) < 6:
+        if logged_this_frame:
             evidence_snapshots.append(annotated_rgb)
 
         progress_bar.progress(min(frame_idx / total_frames, 1.0))

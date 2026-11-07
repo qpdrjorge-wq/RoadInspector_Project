@@ -14,6 +14,7 @@ from utils.detector import analyze_road_frame, get_mapillary_token, haversine_me
 
 st.set_page_config(page_title="Mapillary Scanner", layout="wide")
 from utils.nav import render_top_nav
+
 render_top_nav()
 init_db()
 
@@ -96,7 +97,13 @@ def fetch_latest_road_sequence(token, lat, lon):
         f"https://graph.mapillary.com/images?access_token={token}"
         f"&fields=id,geometry,thumb_1024_url,sequence,captured_at&bbox={bbox}&limit=200"
     )
-    resp = requests.get(url, timeout=15)
+
+    try:
+        resp = requests.get(url, timeout=30)
+    except requests.exceptions.Timeout:
+        return {"error": "Mapillary servers timed out. Please try searching again."}
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Connection Error: {str(e)}"}
 
     if resp.status_code != 200:
         return {"error": f"Mapillary API Error {resp.status_code}"}
@@ -201,7 +208,13 @@ if st.session_state.target_coords:
                 hazards_found = 0
                 logged_points = []
 
-                for idx, item in enumerate(frames):
+                # NEW: Array to collect the images for the final gallery
+                evidence_snapshots = []
+
+                # ALGORITHM: Sequence Subsampling - Analyze every 4th frame to speed up by 75%
+                optimized_frames = frames[::4]
+
+                for idx, item in enumerate(optimized_frames):
                     img_url = item.get("thumb_1024_url")
                     if not img_url:
                         continue
@@ -213,7 +226,11 @@ if st.session_state.target_coords:
                     if img is None:
                         continue
 
+                    # ALGORITHM: imgsz matrix reduction for faster Mapillary processing
                     annotated_bgr, detections = analyze_road_frame(img, conf=0.40)
+
+                    # NEW: Track if we actually saved a hazard this frame
+                    logged_this_frame = False
 
                     for det in detections:
                         h_name = det["name"]
@@ -229,13 +246,26 @@ if st.session_state.target_coords:
                             insert_report(h_name, det["severity"], lat=lat, lon=lon, image_path=img_path)
                             logged_points.append((h_name, lat, lon))
                             hazards_found += 1
+                            logged_this_frame = True  # Flag triggered for gallery inclusion
 
                     annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
                     video_feed.image(annotated_rgb, use_container_width=True)
-                    progress.progress((idx + 1) / len(frames))
+
+                    # NEW: If the flag triggered, save this RGB frame for the end
+                    if logged_this_frame:
+                        evidence_snapshots.append(annotated_rgb)
+
+                    progress.progress((idx + 1) / len(optimized_frames))
 
                 st.success(
                     f"Sequence Complete! {hazards_found} unique road hazards logged to the LGU database."
                 )
+
+                # NEW: Render the gallery at the end of the Mapillary scan
+                if evidence_snapshots:
+                    st.subheader("Captured Mapillary Hazards")
+                    cols = st.columns(3)
+                    for idx, snap in enumerate(evidence_snapshots):
+                        cols[idx % 3].image(snap, use_container_width=True)
 else:
     st.info("Search a street above or click directly on a road line on the map to begin.")

@@ -8,9 +8,12 @@ from contextlib import closing
 
 st.set_page_config(page_title="Reports & Logs", layout="wide")
 from utils.nav import render_top_nav
+
 render_top_nav()
 
-DB_FILE = "inspections.db"
+# FORCED ABSOLUTE PATH
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_FILE = os.path.join(BASE_DIR, "inspections.db")
 
 st.markdown("""
     <style>
@@ -18,9 +21,6 @@ st.markdown("""
     .pill-critical { color: #d32f2f; border-color: #d32f2f; background-color: #ffebee; }
     .pill-medium { color: #f57c00; border-color: #f57c00; background-color: #fff3e0; }
     .pill-low { color: #388e3c; border-color: #388e3c; background-color: #e8f5e9; }
-    .styled-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 14px; }
-    .styled-table th { background-color: #f9f9f9; color: #777; font-weight: 600; text-align: left; padding: 12px 16px; border-bottom: 1px solid #eee; }
-    .styled-table td { padding: 16px; border-bottom: 1px solid #eee; color: #333; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -119,7 +119,7 @@ def build_export(frame):
 
     def label(k):
         if not k:
-            return "Batch Video Upload (no GPS)"
+            return "Dashcam Audit (No GPS)"
         text = ", ".join(p for p in (part(k, 0), part(k, 1), part(k, 2)) if p)
         return text or k
 
@@ -143,56 +143,109 @@ except Exception:
     df = pd.DataFrame()
 
 st.title("System Reports & Inspection Logs")
-st.markdown("Download official LGU infrastructure CSV reports and review automated visual evidence.")
+st.markdown("Review grouped audit sessions and export selective LGU infrastructure reports.")
 
 if not df.empty:
+
+    # --- MASTER EXPORT: Download EVERYTHING ---
+    st.divider()
     col_title, col_btn = st.columns([4, 1])
     with col_title:
         st.subheader("Official Database Export")
-        st.caption("The CSV includes the street, barangay, and city of every geotagged report.")
+        st.caption("Download the complete Master CSV containing every report in the database across all locations.")
 
     sig = (len(df), int(df["Report_ID"].max()))
     if st.session_state.get("export_sig") != sig:
         st.session_state.pop("export_csv", None)
 
     with col_btn:
-        prepare = st.button("📍 Prepare CSV with locations", use_container_width=True)
+        prepare_all = st.button("📍 Prepare Master CSV", use_container_width=True, key="prep_all")
         if "export_csv" in st.session_state:
-            st.download_button("📥 Download LGU CSV", data=st.session_state["export_csv"],
-                               file_name="lgu_infrastructure_audit.csv", mime="text/csv",
-                               use_container_width=True)
+            st.download_button("📥 Download Master CSV", data=st.session_state["export_csv"],
+                               file_name="master_lgu_audit.csv", mime="text/csv",
+                               use_container_width=True, key="dl_all")
 
-    if prepare:
-        export_df = build_export(df)
-        st.session_state["export_csv"] = export_df.to_csv(index=False).encode("utf-8-sig")
+    if prepare_all:
+        export_df_all = build_export(df)
+        st.session_state["export_csv"] = export_df_all.to_csv(index=False).encode("utf-8-sig")
         st.session_state["export_sig"] = sig
         st.rerun()
-
     st.divider()
 
-    st.subheader("Visual Evidence Gallery")
+    # --- GROUPED AUDIT SESSIONS ---
+    df['Date_Only'] = pd.to_datetime(df['Date_Captured']).dt.date
+    df['Group_Lat'] = df['Latitude'].round(3).fillna("Dashcam")
+    df['Group_Lon'] = df['Longitude'].round(3).fillna("Upload")
+    grouped_audits = df.groupby(['Date_Only', 'Group_Lat', 'Group_Lon'])
 
-    filter_val = st.selectbox("Filter by Severity:", ["All", "CRITICAL", "MEDIUM", "LOW"])
-    if filter_val != "All":
-        display_df = df[df['Severity'] == filter_val]
-    else:
-        display_df = df
+    st.subheader("Recent Audit Sessions")
+    st.caption(
+        "Expand an audit session below to view visual evidence or download a targeted report for that specific street.")
 
-    for _, row in display_df.iterrows():
-        col_img, col_details = st.columns([1, 4])
-        with col_img:
-            if 'Image_Path' in df.columns and pd.notnull(row['Image_Path']) and os.path.exists(row['Image_Path']):
-                st.image(row['Image_Path'], use_container_width=True)
-            else:
-                st.info("No image captured")
+    for (date, g_lat, g_lon), group_df in grouped_audits:
 
-        with col_details:
-            loc_str = reverse_geocode(row['Latitude'], row['Longitude']) if pd.notnull(
-                row['Latitude']) else "Batch Video Upload"
-            st.markdown(render_pill(row['Severity']), unsafe_allow_html=True)
-            st.markdown(f"**Hazard Detected:** {row['Hazard_Class']}")
-            st.caption(
-                f"📍 **Location:** {loc_str} &nbsp; | &nbsp; 🕒 **Date:** {str(row['Date_Captured']).split('.')[0]}")
-        st.divider()
+        if g_lat == "Dashcam":
+            session_name = f"Dashcam Video Upload - {date}"
+            loc_str = "Batch Video Upload (No GPS)"
+            icon = "🎥"
+        else:
+            loc_str = reverse_geocode(group_df.iloc[0]['Latitude'], group_df.iloc[0]['Longitude'])
+            session_name = f"Mapillary Scan: {loc_str} - {date}"
+            icon = "📍"
+
+        total_hazards = len(group_df)
+        crit = len(group_df[group_df['Severity'] == 'CRITICAL'])
+
+        # Find the first valid image path to use as the Cover Image for this group
+        cover_image = None
+        for img in group_df['Image_Path'].dropna():
+            if os.path.exists(img):
+                cover_image = img
+                break
+
+        with st.expander(f"{icon} {session_name} | {total_hazards} Hazards ({crit} Critical)"):
+
+            # Top layout: Cover image on the left, session details and download on the right
+            c_cover, c_info = st.columns([1, 4])
+            with c_cover:
+                if cover_image:
+                    st.image(cover_image, caption="Session Cover", use_container_width=True)
+                else:
+                    st.info("No visual evidence")
+
+            with c_info:
+                st.markdown(f"**Audit Location:** {loc_str}")
+                st.markdown(f"**Date Logged:** {date}")
+                st.markdown(f"**Total Critical Hazards:** {crit}")
+
+                # Selective Download Button for JUST this specific Audit Session
+                export_group_df = build_export(group_df.copy())
+                csv_data = export_group_df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    label="📥 Download CSV For This Location Only",
+                    data=csv_data,
+                    file_name=f"audit_{date}_{g_lat}.csv",
+                    mime="text/csv",
+                    key=f"dl_{date}_{g_lat}_{g_lon}"
+                )
+
+            st.markdown("#### Individual Detections")
+
+            # Display the visual evidence gallery specifically for this group
+            for _, row in group_df.iterrows():
+                col_img, col_details = st.columns([1, 4])
+                with col_img:
+                    if 'Image_Path' in group_df.columns and pd.notnull(row['Image_Path']) and os.path.exists(
+                            row['Image_Path']):
+                        st.image(row['Image_Path'], use_container_width=True)
+                    else:
+                        st.info("No image")
+
+                with col_details:
+                    st.markdown(render_pill(row['Severity']), unsafe_allow_html=True)
+                    st.markdown(f"**Hazard Detected:** {row['Hazard_Class']}")
+                    st.caption(
+                        f" **Coordinates:** {row['Latitude']}, {row['Longitude']} &nbsp; | &nbsp; 🕒 **Time:** {str(row['Date_Captured']).split('.')[0]}")
+                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
 else:
     st.info("System database is empty. No reports to download.")

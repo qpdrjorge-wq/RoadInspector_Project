@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -23,11 +24,16 @@ def render_pill(severity):
     elif sev == "MEDIUM": return '<span class="pill pill-medium">● MEDIUM</span>'
     else: return '<span class="pill pill-low">● LOW</span>'
 
+# FORCED ABSOLUTE PATH: Ensures the Dashboard reads the exact same file the Scanners write to
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(BASE_DIR, "inspections.db")
+
 try:
-    conn = sqlite3.connect("../inspections.db")
+    conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("SELECT * FROM Reports ORDER BY Date_Captured DESC", conn)
     conn.close()
-except Exception:
+except Exception as e:
+    st.error(f"Database Connection Error: {e}") # This will now visibly warn you if the path is still wrong
     df = pd.DataFrame()
 
 st.title("RoadInspector Command Center")
